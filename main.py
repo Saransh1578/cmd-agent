@@ -6,13 +6,16 @@ import shlex
 import subprocess
 from dataclasses import dataclass
 from textwrap import dedent
+from dotenv import load_dotenv
 
 from pydantic_ai import Agent
-from pydantic_ai.models.openai import OpenAIChatModel
-from pydantic_ai.providers.openrouter import OpenRouterProvider
+from pydantic_ai.models.google import GoogleModel
+from pydantic_ai.providers.google import GoogleProvider
 
-OPENROUTER_KEY=os.getenv("OPENROUTER_API_KEY")
-if not OPENROUTER_KEY:
+load_dotenv()
+
+GEMINI_KEY=os.getenv("GEMINI_API_KEY")
+if not GEMINI_KEY:
     sys.exit("API key invalid!")
 
 System_Prompt=dedent("""\
@@ -31,9 +34,9 @@ class Answer:
     failure: str|None
 
 agent=Agent(
-    model = OpenAIChatModel(
-    'qwen/qwen3-coder',
-    provider=OpenRouterProvider(api_key=OPENROUTER_KEY)),
+    model = GoogleModel(
+    'gemini-2.5-flash',
+    provider=GoogleProvider(api_key=GEMINI_KEY)),
     system_prompt=System_Prompt,
     output_type=Answer
 )
@@ -47,4 +50,23 @@ def answer(success:bool,cmd:str | None, failure:str|None):
     return Answer(success, cmd, failure)
 
 def main():
-    
+    user_prompt=" ".join(sys.argv[1:])
+    if not user_prompt:
+        print("No prompt provided!")
+        sys.exit(1)
+    response=agent.run_sync(user_prompt)
+    result: Answer=response.output
+
+    if result.success and result.cmd:
+        print(f"[AI answer]: {result.cmd}")
+        confirm=input("Execute? (Y/N):").strip().lower()
+        if confirm in {"y","yes","Y"}:
+            subprocess.run(["powershell", "-Command", result.cmd], check=True)
+
+            
+    else:
+        print(f"[AI Answer]: {result.failure or 'Failed to generate command'}")
+
+
+if __name__=="__main__":
+    main()
